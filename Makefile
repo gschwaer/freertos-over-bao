@@ -37,6 +37,12 @@ endif
 
 -include $(SRC_DIR)/sources.mk
 C_SRC+=$(addprefix $(SRC_DIR)/, $(src_c_srcs))
+ifneq ($(APP_SRC_DIR),)
+# remove main.c from source files because the app will provide a main.c
+C_SRC:=$(filter-out %main.c,$(C_SRC))
+-include $(APP_SRC_DIR)/sources.mk
+APP_C_SRC+=$(addprefix $(APP_SRC_DIR)/, $(app_src_c_srcs))
+endif
 
 FREERTOS_DIR:=$(SRC_DIR)/freertos
 FREERTOS_MEMMNG_DIR:=$(FREERTOS_DIR)/portable/MemMang
@@ -71,6 +77,9 @@ INC_DIRS+=$(realpath  $(addsuffix /inc, $(SRC_DIRS)) $(addsuffix /include, $(SRC
 LD_FILE:= $(SRC_DIR)/linker.ld
 GEN_LD_FILE:= $(BUILD_DIR)/linker.ld
 OBJS = $(C_SRC:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o) $(ASM_SRC:$(SRC_DIR)/%.S=$(BUILD_DIR)/%.o)
+ifneq ($(APP_SRC_DIR),)
+OBJS += $(APP_C_SRC:$(APP_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
+endif
 DEPS = $(OBJS:%=%.d) $(GEN_LD_FILE).d
 DIRS:=$(sort $(dir $(OBJS) $(DEPS)))
 
@@ -109,6 +118,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.S
 	$(CC) $(ASFLAGS) $(CPPFLAGS) -c $< -o $@
+
+ifneq ($(APP_SRC_DIR),)
+$(BUILD_DIR)/%.o: $(APP_SRC_DIR)/%.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(APP_SRC_DIR)/%.S
+	$(CC) $(ASFLAGS) $(CPPFLAGS) -c $< -o $@
+endif
 
 $(GEN_LD_FILE): $(LD_FILE)
 	$(CC) $(CPPFLAGS) -E -x assembler-with-cpp $< | grep "^[^#;]" > $@
