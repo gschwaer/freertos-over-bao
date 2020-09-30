@@ -1070,6 +1070,29 @@ void vTaskSuspend( TaskHandle_t xTaskToSuspend ) PRIVILEGED_FUNCTION;
 
 /**
  * task. h
+ * <pre>void vTaskSuspendFromCritical( TaskHandle_t xTaskToSuspend );</pre>
+ *
+ * INCLUDE_vTaskSuspend must be defined as 1 for this function to be available.
+ * See the configuration section for more information.
+ *
+ * Suspends a task from within a critical section to allow conditional suspending
+ * with a condition that can be changed from interrupt (not mutexable).
+ */
+void vTaskSuspendFromCritical( TaskHandle_t xTaskToSuspend ) PRIVILEGED_FUNCTION;
+
+/**
+ * task. h
+ * <pre>BaseType_t xTaskSuspendFromISR( TaskHandle_t xTaskToSuspend );</pre>
+ *
+ * INCLUDE_xTaskSuspendFromISR must be defined as 1 for this function to be available.
+ * See the configuration section for more information.
+ *
+ * Suspends a task from within an interrupt handler.
+ */
+BaseType_t xTaskSuspendFromISR( TaskHandle_t xTaskToSuspend ) PRIVILEGED_FUNCTION;
+
+/**
+ * task. h
  * <pre>void vTaskResume( TaskHandle_t xTaskToResume );</pre>
  *
  * INCLUDE_vTaskSuspend must be defined as 1 for this function to be available.

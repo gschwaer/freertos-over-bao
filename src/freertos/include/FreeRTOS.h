@@ -168,6 +168,10 @@ extern "C" {
 	#define INCLUDE_xTaskResumeFromISR 1
 #endif
 
+#ifndef INCLUDE_xTaskSuspendFromISR
+	#define INCLUDE_xTaskSuspendFromISR 0
+#endif
+
 #ifndef INCLUDE_xTimerPendFunctionCall
 	#define INCLUDE_xTimerPendFunctionCall 0
 #endif

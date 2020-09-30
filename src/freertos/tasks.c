@@ -25,6 +25,18 @@
  * 1 tab == 4 spaces!
  */
 
+
+struct Trace
+{
+unsigned int task_not_running;
+unsigned int scheduler_suspended;
+unsigned int scheduler_not_suspended_task_is_active;
+unsigned int scheduler_not_suspended_task_is_inactive;
+unsigned int resumed_while_suspending_pending;
+unsigned int suspended_after_sched_resume;
+unsigned int suspended_current_after_sched_resume;
+} trace;
+
 /* Standard includes. */
 #include <stdlib.h>
 #include <string.h>
@@ -357,6 +369,12 @@ PRIVILEGED_DATA static List_t xPendingReadyList;						/*< Tasks that have been r
 #if ( INCLUDE_vTaskSuspend == 1 )
 
 	PRIVILEGED_DATA static List_t xSuspendedTaskList;					/*< Tasks that are currently suspended. */
+
+#endif
+
+#if ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+
+	PRIVILEGED_DATA static List_t xPendingSuspendList;					/*< Tasks that have been suspended while the scheduler was suspended.  They will be moved to the suspended list when the scheduler is resumed. */
 
 #endif
 
@@ -1701,11 +1719,11 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 
 #if ( INCLUDE_vTaskSuspend == 1 )
 
-	void vTaskSuspend( TaskHandle_t xTaskToSuspend )
+	void vTaskSuspendFromCritical( TaskHandle_t xTaskToSuspend )
 	{
 	TCB_t *pxTCB;
 
-		taskENTER_CRITICAL();
+		/* Already in critical section. */
 		{
 			/* If null is passed in here then it is the running task that is
 			being suspended. */
@@ -1796,6 +1814,12 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 			mtCOVERAGE_TEST_MARKER();
 		}
 	}
+	
+	void vTaskSuspend( TaskHandle_t xTaskToSuspend )
+	{
+		taskENTER_CRITICAL();
+		vTaskSuspendFromCritical( xTaskToSuspend );
+	}
 
 #endif /* INCLUDE_vTaskSuspend */
 /*-----------------------------------------------------------*/
@@ -1827,7 +1851,15 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 				}
 				else
 				{
-					mtCOVERAGE_TEST_MARKER();
+					#if ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+					{
+						if( listIS_CONTAINED_WITHIN( &xPendingSuspendList, &( pxTCB->xEventListItem ) ) == pdTRUE )
+						{
+							xReturn = pdTRUE;
+						}
+					}
+					#endif
+					//mtCOVERAGE_TEST_MARKER();
 				}
 			}
 			else
@@ -1933,6 +1965,17 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 			if( prvTaskIsTaskSuspended( pxTCB ) != pdFALSE )
 			{
 				traceTASK_RESUME_FROM_ISR( pxTCB );
+				
+				#if ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+				{
+					/* Check if task is in the pending suspend list. */
+					if( listIS_CONTAINED_WITHIN( &xPendingSuspendList, &( pxTCB->xEventListItem ) ) == pdTRUE )
+					{
+						trace.resumed_while_suspending_pending++;
+						( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+					}
+				}
+				#endif
 
 				/* Check the ready lists can be accessed. */
 				if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )
@@ -2213,6 +2256,42 @@ BaseType_t xAlreadyYielded = pdFALSE;
 		{
 			if( uxCurrentNumberOfTasks > ( UBaseType_t ) 0U )
 			{
+				#if ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+				{
+					/* Move any suspended tasks from the pending list into the
+					suspended list. */
+					while( listLIST_IS_EMPTY( &xPendingSuspendList ) == pdFALSE )
+					{
+						pxTCB = listGET_OWNER_OF_HEAD_ENTRY( ( &xPendingSuspendList ) ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
+						( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+						( void ) uxListRemove( &( pxTCB->xStateListItem ) );
+						taskRESET_READY_PRIORITY( pxTCB->uxPriority );
+						vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
+
+						/* If the moved task has a priority higher than the current
+						task then a yield must be performed. */
+						if( pxCurrentTCB == pxTCB )
+						{
+							xYieldPending = pdTRUE;
+							trace.suspended_current_after_sched_resume++;
+						}
+						else
+						{
+							trace.suspended_after_sched_resume++;
+						}
+					}
+					
+					if( pxTCB != NULL )
+					{
+						/* Reset the next expected unblock time in case it referred
+						to the task that is now in the Suspended state. */
+						prvResetNextTaskUnblockTime();
+						
+						pxTCB = NULL;
+					}
+				}
+				#endif
+				
 				/* Move any readied tasks from the pending list into the
 				appropriate ready list. */
 				while( listLIST_IS_EMPTY( &xPendingReadyList ) == pdFALSE )
@@ -3628,6 +3707,12 @@ UBaseType_t uxPriority;
 		vListInitialise( &xSuspendedTaskList );
 	}
 	#endif /* INCLUDE_vTaskSuspend */
+	
+	#if ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+	{
+		vListInitialise( &xPendingSuspendList );
+	}
+	#endif
 
 	/* Start with pxDelayedTaskList using list1 and the pxOverflowDelayedTaskList
 	using list2. */
@@ -5306,5 +5391,155 @@ when performing module tests). */
 	#endif
 
 #endif
+/*-----------------------------------------------------------*/
 
+void vTaskPrintTrace()
+{
+	printf( "task_not_running = %u\n"
+			"scheduler_suspended = %u\n"
+			"scheduler_not_suspended_task_is_active = %u\n"
+			"scheduler_not_suspended_task_is_inactive = %u\n"
+			"resumed_while_suspending_pending = %u\n"
+			"suspended_after_sched_resume = %u\n"
+			"suspended_current_after_sched_resume = %u\n",
+			trace.task_not_running,
+			trace.scheduler_suspended,
+			trace.scheduler_not_suspended_task_is_active,
+			trace.scheduler_not_suspended_task_is_inactive,
+			trace.resumed_while_suspending_pending,
+			trace.suspended_after_sched_resume,
+			trace.suspended_current_after_sched_resume);
+}
 
+#if ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) )
+
+	static BaseType_t prvTaskIsTaskReady( const TaskHandle_t xTask )
+	{
+	const TCB_t * const pxTCB = xTask;
+
+		/* Accesses xPendingReadyList so must be called from a critical
+		section. */
+		
+		/* Is task in a ready queue? */
+		List_t const * pxQueue = listLIST_ITEM_CONTAINER( &pxTCB->xStateListItem );
+		if(pxQueue >= &pxReadyTasksLists[0] && pxQueue <= &pxReadyTasksLists[configMAX_PRIORITIES-1])
+			return pdTRUE;
+		
+		/* Is task in the pending ready queue? */
+		if(pxQueue == &xPendingReadyList)
+			return pdTRUE;
+
+		return pdFALSE;
+	}
+
+	BaseType_t xTaskSuspendFromISR( TaskHandle_t xTaskToSuspend )
+	{
+	BaseType_t xYieldRequired = pdFALSE;
+	TCB_t * const pxTCB = xTaskToSuspend;
+	UBaseType_t uxSavedInterruptStatus;
+	
+		configASSERT( xTaskToSuspend );
+
+		/* RTOS ports that support interrupt nesting have the concept of a
+		maximum	system call (or maximum API call) interrupt priority.
+		Interrupts that are	above the maximum system call priority are keep
+		permanently enabled, even when the RTOS kernel is in a critical section,
+		but cannot make any calls to FreeRTOS API functions.  If configASSERT()
+		is defined in FreeRTOSConfig.h then
+		portASSERT_IF_INTERRUPT_PRIORITY_INVALID() will result in an assertion
+		failure if a FreeRTOS API function is called from an interrupt that has
+		been assigned a priority above the configured maximum system call
+		priority.  Only FreeRTOS functions that end in FromISR can be called
+		from interrupts	that have been assigned a priority at or (logically)
+		below the maximum system call interrupt priority.  FreeRTOS maintains a
+		separate interrupt safe API to ensure interrupt entry is as fast and as
+		simple as possible.  More information (albeit Cortex-M specific) is
+		provided on the following link:
+		https://www.freertos.org/RTOS-Cortex-M3-M4.html */
+		portASSERT_IF_INTERRUPT_PRIORITY_INVALID();
+
+		uxSavedInterruptStatus = portSET_INTERRUPT_MASK_FROM_ISR();
+		{
+			/* Check if the task is not already suspended */
+			if( prvTaskIsTaskReady( pxTCB ) == pdFALSE )
+			{
+				// task is already suspended
+				trace.task_not_running++;
+			}
+			else
+			{
+				/* Is the task waiting on an event also? */
+				if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
+				{
+					( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+				}
+				
+				#if( configUSE_TASK_NOTIFICATIONS == 1 )
+				{
+					if( pxTCB->ucNotifyState == taskWAITING_NOTIFICATION )
+					{
+						/* The task was blocked to wait for a notification, but
+						is now suspended, so no notification was received. */
+						pxTCB->ucNotifyState = taskNOT_WAITING_NOTIFICATION;
+					}
+				}
+				#endif
+				
+				/* Check if the ready lists can be accessed. */
+				if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )
+				{
+					/* Suspended lists can be accessed so move the task from the
+					ready list to the suspended list directly. */
+					if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+					{
+						taskRESET_READY_PRIORITY( pxTCB->uxPriority );
+					}
+					vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
+					
+					/* Check if the task to suspend is currently running. */
+					if( pxCurrentTCB == pxTCB )
+					{
+						xYieldRequired = pdTRUE;
+						trace.scheduler_not_suspended_task_is_active++;
+					}
+					else
+					{
+						trace.scheduler_not_suspended_task_is_inactive++;
+					}
+					
+					/* Reset the next expected unblock time in case it referred
+					to the task that is now in the Suspended state. */
+					prvResetNextTaskUnblockTime();
+					
+					/* uxSchedulerSuspended has to be false if xSchedulerRunnin
+					is false. */
+					if( xSchedulerRunning == pdFALSE )
+					{
+						if( listCURRENT_LIST_LENGTH( &xSuspendedTaskList ) == uxCurrentNumberOfTasks ) /*lint !e931 Right has no side effect, just volatile. */
+						{
+							/* No other tasks are ready, so set pxCurrentTCB 
+							back to NULL so when the next task is created
+							pxCurrentTCB will be set to point to it no matter
+							what its relative priority is. */
+							pxCurrentTCB = NULL;
+						}
+					}
+				}
+				else
+				{
+					/* The delayed or ready lists cannot be accessed so the task
+					is held in the pending ready list until the scheduler is
+					unsuspended. */
+					vListInsertEnd( &( xPendingSuspendList ), &( pxTCB->xEventListItem ) );
+					/* xYieldRequired not necessary because on scheduler resume
+					the pending suspended list will be cleared automatically. */
+					trace.scheduler_suspended++;
+				}
+			}
+		}
+		portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedInterruptStatus );
+
+		return xYieldRequired;
+	}
+
+#endif /* ( ( INCLUDE_xTaskSuspendFromISR == 1 ) && ( INCLUDE_vTaskSuspend == 1 ) ) */
