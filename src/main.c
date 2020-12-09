@@ -84,7 +84,7 @@ int main(void){
     xTaskCreate(
         vTask,
         "Task1",
-        configMINIMAL_STACK_SIZE,
+        configMINIMAL_STACK_SIZE*16,
         (void *)1,
         tskIDLE_PRIORITY + 1,
         NULL);
@@ -92,7 +92,7 @@ int main(void){
     xTaskCreate(
         vTask,
         "Task2",
-        configMINIMAL_STACK_SIZE,
+        configMINIMAL_STACK_SIZE*16,
         (void *)2,
         tskIDLE_PRIORITY + 1,
         NULL);
@@ -114,6 +114,9 @@ void vApplicationMallocFailedHook(void)
 	to query the size of free heap space that remains (although it does not
 	provide information on how the remaining heap might be fragmented). */
     taskDISABLE_INTERRUPTS();
+
+    printf("Task '%s' failed to allocate memory!\nSystem halted.\n", pcTaskGetName(NULL));
+
     for (;;)
         ;
 }
@@ -142,6 +145,9 @@ void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName)
 	configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
 	function is called if a stack overflow is detected. */
     taskDISABLE_INTERRUPTS();
+
+    printf("Task '%s' exceeded its stack space!\nSystem halted.\n", pcTaskGetName(pxTask));
+
     for (;;)
         ;
 }
