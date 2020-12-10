@@ -32,7 +32,19 @@
 
 #include <uart.h>
 #include <irq.h>
-#include <plat.h>
+#include <platform.h>
+
+#if PLATFORM == PLATFORM_IMX8
+static const char *platform_name = "IMX8";
+#elif PLATFORM == PLATFORM_QEMU_ARM64
+static const char *platform_name = "QEMU/AArch64";
+#elif PLATFORM == PLATFORM_QEMU_RISCV
+static const char *platform_name = "QEMU/RISCV";
+#elif PLATFORM == PLATFORM_ZCU
+static const char *platform_name = "ZCU";
+#elif PLATFORM == PLATFORM_TX2
+static const char *platform_name = "TX2";
+#endif
 
 /*
  * Prototypes for the standard FreeRTOS callback/hook functions implemented
@@ -63,7 +75,7 @@ void uart_rx_handler(){
 
 int main(void){
 
-    printf("Bao FreeRTOS guest\n");
+    printf("Bao FreeRTOS guest on %s\n", platform_name);
 
     uart_enable_rxirq();
     irq_set_handler(UART_IRQ_ID, uart_rx_handler);

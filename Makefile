@@ -48,6 +48,8 @@ C_SRC+=$(FREERTOS_MEMMNG_DIR)/heap_4.c
 -include $(PLATFORM_DIR)/sources.mk
 C_SRC+=$(addprefix $(PLATFORM_DIR)/, $(plat_c_srcs))
 ASM_SRC+=$(addprefix $(PLATFORM_DIR)/, $(plat_s_srcs))
+INC_DIRS+=$(SRC_DIR)/platform/inc
+PLATFORM_FLAGS+=-DPLATFORM=$(PLAT)
 
 SRC_DIRS+= $(foreach driver, $(drivers), $(DRIVERS_DIR)/$(driver))
 -include $(foreach driver, $(drivers), $(DRIVERS_DIR)/$(driver)/sources.mk)
@@ -78,7 +80,7 @@ LD=$(CROSS_COMPILE)ld
 OBJCOPY=$(CROSS_COMPILE)objcopy
 OBJDUMP=$(CROSS_COMPILE)objdump
 
-GENERIC_FLAGS = $(ARCH_GENERIC_FLAGS) -O$(OPT_LEVEL) -g$(DEBUG_LEVEL) -static
+GENERIC_FLAGS = $(ARCH_GENERIC_FLAGS) $(PLATFORM_FLAGS) -O$(OPT_LEVEL) -g$(DEBUG_LEVEL) -static
 ASFLAGS = $(GENERIC_FLAGS) $(ARCH_ASFLAGS) 
 CFLAGS = $(GENERIC_FLAGS) $(ARCH_CFLAGS) 
 CPPFLAGS =	$(ARCH_CPPFLAGS) $(addprefix -I, $(INC_DIRS)) -MD -MF $@.d

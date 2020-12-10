@@ -1,3 +1,4 @@
 ARCH:=armv8
 GIC_VERSION:=GICV2
 drivers:=8250_uart
+PLAT:=PLATFORM_TX2

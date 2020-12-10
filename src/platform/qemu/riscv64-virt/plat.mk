@@ -1,2 +1,3 @@
 ARCH:=riscv
 drivers:=8250_uart
+PLAT:=PLATFORM_QEMU_RISCV
