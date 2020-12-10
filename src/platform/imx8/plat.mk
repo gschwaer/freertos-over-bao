@@ -1,3 +1,4 @@
 ARCH:=armv8
 GIC_VERSION:=GICV3
 drivers:=nxp_uart
+PLAT:=PLATFORM_IMX8
