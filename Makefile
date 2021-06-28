@@ -15,8 +15,8 @@
 #
 
 NAME := freertos
-OPT_LEVEL = 0
-DEBUG_LEVEL = 3
+OPT_LEVEL = 2
+DEBUG_LEVEL = 0
 
 ifneq ($(MAKECMDGOALS), clean)
 ifeq ($(PLATFORM),)
